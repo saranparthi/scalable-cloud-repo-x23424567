@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real-Time Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            padding: 20px;
+        }
+        
+        .dashboard-header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .dashboard-header h1 {
+            font-size: 28px;
+            font-weight: 600;
+        }
+        
+        .dashboard-header p {
+            opacity: 0.8;
+            margin-top: 8px;
+        }
+        
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+        
+        .kpi-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            border-left: 4px solid #4a90d9;
+            transition: transform 0.2s;
+        }
+        
+        .kpi-card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .kpi-label {
+            color: #6b7280;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+        
+        .kpi-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1a1a2e;
+        }
+        
+        .kpi-card:nth-child(2) { border-left-color: #e74c3c; }
+        .kpi-card:nth-child(3) { border-left-color: #2ecc71; }
+        .kpi-card:nth-child(4) { border-left-color: #f39c12; }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        
+        .card h3 {
+            color: #1a1a2e;
+            font-size: 18px;
+            margin-bottom: 16px;
+            border-bottom: 2px solid #f0f2f5;
+            padding-bottom: 12px;
+        }
+        
+        .table-wrapper {
+            overflow-x: auto;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        
+        table th {
+            background: #f8f9fa;
+            color: #374151;
+            font-weight: 600;
+            padding: 12px 16px;
+            text-align: left;
+            border-bottom: 2px solid #e5e7eb;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        
+        table td {
+            padding: 10px 16px;
+            border-bottom: 1px solid #f0f2f5;
+        }
+        
+        table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        
+        .badge-positive { background: #d4edda; color: #155724; }
+        .badge-negative { background: #f8d7da; color: #721c24; }
+        .badge-neutral { background: #e2e3e5; color: #383d41; }
+        
+        .chart-container {
+            height: 250px;
+            margin-top: 16px;
+        }
+        
+        .chart-container-history {
+            height: 300px;
+            margin-top: 16px;
+        }
+        
+        .full-width {
+            grid-column: 1 / -1;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .status-live { background: #2ecc71; }
+        .status-loading { background: #f39c12; animation: pulse 1s infinite; }
+        .status-error { background: #e74c3c; }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+        
+        .refresh-controls {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 16px;
+        }
+        
+        select, button {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid #d1d5db;
+            background: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        button {
+            background: #4a90d9;
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #357abd;
+        }
+        
+        .last-updated {
+            color: #6b7280;
+            font-size: 13px;
+            margin-top: 16px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #6b7280;
+        }
+        
+        .loading-spinner {
+            border: 3px solid #f0f2f5;
+            border-top: 3px solid #4a90d9;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .kpi-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header">
+        <h1>Lambda Architecture Dashboard</h1>
+        <p>Real-time analytics with Speed and Batch layers</p>
+        <div class="refresh-controls">
+            <span id="status">
+                <span class="status-indicator status-live" id="statusIndicator"></span>
+                <span id="statusText">Live</span>
+            </span>
+            <span>|</span>
+            <label for="refreshRate">Refresh:</label>
+            <select id="refreshRate">
+                <option value="0">Manual</option>
+                <option value="5000">5 seconds</option>
+                <option value="10000" selected>10 seconds</option>
+                <option value="30000">30 seconds</option>
+                <option value="60000">1 minute</option>
+            </select>
+            <button onclick="refreshData()">Refresh Now</button>
+        </div>
+    </div>
+    
+    <div class="kpi-grid" id="kpiGrid">
+        <div class="kpi-card">
+            <div class="kpi-label">Batch Total Records</div>
+            <div class="kpi-value" id="batchTotal">-</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Speed Events (Latest Window)</div>
+            <div class="kpi-value" id="speedTotal">-</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Unique Keywords</div>
+            <div class="kpi-value" id="uniqueKeywords">-</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-label">Window Timestamp</div>
+            <div class="kpi-value" id="windowTimestamp" style="font-size:16px;">-</div>
+        </div>
+    </div>
+    
+    <div class="dashboard-grid">
+        <div class="card">
+            <h3>Batch Sentiment Distribution</h3>
+            <div class="chart-container">
+                <canvas id="batchSentimentChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>Speed Sentiment Distribution (Latest Window)</h3>
+            <div class="chart-container">
+                <canvas id="speedSentimentChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>Batch Topic Distribution</h3>
+            <div class="chart-container">
+                <canvas id="batchTopicsChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>Speed Trending Keywords</h3>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Keyword</th>
+                            <th>Count</th>
+                        </tr>
+                    </thead>
+                    <tbody id="trendingTable">
+                        <tr><td colspan="3" style="text-align:center;color:#6b7280;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="card full-width">
+            <h3>Sentiment Trends Over Time</h3>
+            <div class="chart-container-history">
+                <canvas id="historyChart"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="last-updated" id="lastUpdated">Last updated: -</div>
+    
+    <script>
+        const API_BASE = '';
+        let refreshInterval = null;
+        let charts = {};
+        let batchData = null;
+        let speedData = null;
+        
+        async function fetchAPI(endpoint) {
+            try {
+                const response = await fetch(`/api/${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error('API fetch error:', error);
+                return null;
+            }
+        }
+        
+        function getSentimentClass(sentiment) {
+            const map = {
+                'Positive': 'badge-positive',
+                'Negative': 'badge-negative',
+                'Neutral': 'badge-neutral'
+            };
+            return map[sentiment] || 'badge-neutral';
+        }
+        
+        function updateKPIs(batch, speed) {
+            let batchTotal = 0;
+            let speedTotal = 0;
+            let uniqueKeywords = 0;
+            let windowTimestamp = '-';
+            
+            if (batch) {
+                batchTotal = batch.reduce((sum, row) => sum + parseInt(row.count || 0), 0);
+                const keywords = batch.filter(row => row.metric_type === 'keywords');
+                uniqueKeywords = keywords.length;
+            }
+            
+            if (speed && speed.length > 0) {
+                speedTotal = speed.reduce((sum, row) => sum + parseInt(row.count || 0), 0);
+                windowTimestamp = speed[0].window_start || '-';
+                if (windowTimestamp.length > 19) {
+                    windowTimestamp = windowTimestamp.substring(0, 19);
+                }
+            }
+            
+            document.getElementById('batchTotal').textContent = batchTotal.toLocaleString();
+            document.getElementById('speedTotal').textContent = speedTotal.toLocaleString();
+            document.getElementById('uniqueKeywords').textContent = uniqueKeywords;
+            document.getElementById('windowTimestamp').textContent = windowTimestamp;
+        }
+        
+        function updateBatchTables(batch) {
+            if (!batch) return;
+            
+            const sentiment = batch.filter(row => row.metric_type === 'sentiment');
+            const topics = batch.filter(row => row.metric_type === 'topic');
+            
+            updateChart('batchSentimentChart', sentiment, 'metric_name', 'count', 'Sentiment Distribution');
+            updateChart('batchTopicsChart', topics, 'metric_name', 'count', 'Topic Distribution');
+        }
+        
+        function updateSpeedTables(speed) {
+            if (!speed) return;
+            
+            const sentiment = speed.filter(row => row.metric_type === 'sentiment');
+            const trending = speed.filter(row => row.metric_type === 'trending');
+            const top5 = speed.filter(row => row.metric_type === 'top5');
+            
+            updateChart('speedSentimentChart', sentiment, 'metric_name', 'count', 'Sentiment Distribution');
+            
+            const trendingRows = top5.length > 0 ? top5 : trending;
+            updateTrendingTable(trendingRows);
+        }
+        
+        function updateChart(chartId, data, labelKey, valueKey, title) {
+            const ctx = document.getElementById(chartId).getContext('2d');
+            
+            if (charts[chartId]) {
+                charts[chartId].destroy();
+            }
+            
+            if (!data || data.length === 0) {
+                charts[chartId] = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['No Data'],
+                        datasets: [{
+                            data: [1],
+                            backgroundColor: ['#e5e7eb']
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+                return;
+            }
+            
+            const labels = data.map(row => row[labelKey] || 'Unknown');
+            const values = data.map(row => parseInt(row[valueKey] || 0));
+            const colors = ['#4a90d9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#3498db'];
+            
+            charts[chartId] = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: values,
+                        backgroundColor: colors.slice(0, labels.length),
+                        borderWidth: 2,
+                        borderColor: '#ffffff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 12,
+                                font: { size: 11 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function updateTrendingTable(data) {
+            const tbody = document.getElementById('trendingTable');
+            
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:#6b7280;">No trending data available</td></tr>';
+                return;
+            }
+            
+            const sorted = [...data].sort((a, b) => parseInt(b.count || 0) - parseInt(a.count || 0));
+            const top10 = sorted.slice(0, 10);
+            
+            tbody.innerHTML = top10.map((row, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td><strong>${row.metric_name || 'Unknown'}</strong></td>
+                    <td>${parseInt(row.count || 0).toLocaleString()}</td>
+                </tr>
+            `).join('');
+        }
+        
+        function updateHistoryChart(history) {
+            const ctx = document.getElementById('historyChart').getContext('2d');
+            
+            if (charts['historyChart']) {
+                charts['historyChart'].destroy();
+            }
+            
+            if (!history || history.length === 0) {
+                charts['historyChart'] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['No Data'],
+                        datasets: [{
+                            label: 'No Data Available',
+                            data: [0],
+                            borderColor: '#e5e7eb',
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+                return;
+            }
+            
+            const sentimentData = history.filter(row => row.metric_type === 'sentiment');
+            if (sentimentData.length === 0) {
+                charts['historyChart'] = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: ['No Data'],
+                        datasets: [{
+                            label: 'No Sentiment Data',
+                            data: [0],
+                            borderColor: '#e5e7eb',
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+                return;
+            }
+            
+            const grouped = {};
+            sentimentData.forEach(row => {
+                const key = row.metric_name || 'Unknown';
+                if (!grouped[key]) grouped[key] = [];
+                grouped[key].push({
+                    timestamp: row.window_start || '',
+                    count: parseInt(row.count || 0)
+                });
+            });
+            
+            const allTimestamps = [...new Set(sentimentData.map(row => row.window_start))].sort();
+            const labels = allTimestamps.map(ts => ts ? ts.substring(11, 19) : '');
+            
+            const datasets = Object.keys(grouped).map((key, index) => {
+                const colorMap = {
+                    'Positive': '#2ecc71',
+                    'Negative': '#e74c3c',
+                    'Neutral': '#f39c12'
+                };
+                const color = colorMap[key] || `hsl(${index * 120}, 70%, 50%)`;
+                
+                const dataMap = {};
+                grouped[key].forEach(item => {
+                    dataMap[item.timestamp] = item.count;
+                });
+                
+                const data = allTimestamps.map(ts => dataMap[ts] || 0);
+                
+                return {
+                    label: key,
+                    data: data,
+                    borderColor: color,
+                    backgroundColor: color + '20',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3
+                };
+            });
+            
+            charts['historyChart'] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                padding: 16
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                maxTicksLimit: 15,
+                                font: { size: 10 }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+        
+        async function refreshData() {
+            const statusIndicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            
+            statusIndicator.className = 'status-indicator status-loading';
+            statusText.textContent = 'Loading...';
+            
+            try {
+                const [batch, speed, history] = await Promise.all([
+                    fetchAPI('batch'),
+                    fetchAPI('speed'),
+                    fetchAPI('speed-history')
+                ]);
+                
+                batchData = batch;
+                speedData = speed;
+                
+                updateKPIs(batch, speed);
+                updateBatchTables(batch);
+                updateSpeedTables(speed);
+                updateHistoryChart(history);
+                
+                document.getElementById('lastUpdated').textContent = `Last updated: ${new Date().toLocaleString()}`;
+                
+                statusIndicator.className = 'status-indicator status-live';
+                statusText.textContent = 'Live';
+            } catch (error) {
+                console.error('Refresh failed:', error);
+                statusIndicator.className = 'status-indicator status-error';
+                statusText.textContent = 'Error';
+                document.getElementById('lastUpdated').textContent = `Error updating: ${new Date().toLocaleString()}`;
+            }
+        }
+        
+        function setupAutoRefresh() {
+            const select = document.getElementById('refreshRate');
+            select.addEventListener('change', function() {
+                if (refreshInterval) {
+                    clearInterval(refreshInterval);
+                    refreshInterval = null;
+                }
+                
+                const ms = parseInt(this.value);
+                if (ms > 0) {
+                    refreshInterval = setInterval(refreshData, ms);
+                }
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            refreshData();
+            setupAutoRefresh();
+        });
+    </script>
+</body>
+</html>
