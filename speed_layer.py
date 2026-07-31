@@ -1,21 +1,24 @@
 
 
-# speed_layer.py - Batched file writing with timestamps
+
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
-from pyspark.sql.window import Window
 from textblob import TextBlob
 import time
+import boto3
+import json
+from datetime import datetime
+
+print("Starting Speed Layer...")
 
 spark = SparkSession.builder \
     .appName("SpeedLayer") \
-    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-    .config("spark.hadoop.fs.s3a.aws.credentials.provider", 
-            "com.amazonaws.auth.InstanceProfileCredentialsProvider") \
     .config("spark.sql.shuffle.partitions", "1") \
     .getOrCreate()
+
+spark.sparkContext.setLogLevel("WARN")
 
 def sentiment_analysis(text):
     try:
@@ -23,212 +26,151 @@ def sentiment_analysis(text):
             return "Neutral"
         blob = TextBlob(str(text))
         polarity = blob.sentiment.polarity
-        if polarity > 0:
+        if polarity > 0.1:
             return "Positive"
-        elif polarity < 0:
+        elif polarity < -0.1:
             return "Negative"
         else:
             return "Neutral"
     except:
         return "Neutral"
 
-def extract_keywords(text, top_n=5):
+def extract_keywords(text):
     if not text:
         return []
     words = str(text).lower().split()
-    stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'for', 'with', 'without', 'of', 'to', 'is'}
+    stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'for', 
+                 'with', 'without', 'of', 'to', 'is', 'i', 'you', 'we', 'they', 
+                 'he', 'she', 'it', 'my', 'your', 'our', 'their'}
     words = [w for w in words if w not in stopwords and len(w) > 3]
-    return words[:top_n]
-
-def topic_classification(text):
-    topics = {
-        'technology': ['tech', 'software', 'code', 'computer', 'ai', 'data', 'digital', 'app', 'web', 'algorithm'],
-        'politics': ['government', 'election', 'policy', 'vote', 'political', 'president', 'minister', 'democracy'],
-        'sports': ['game', 'team', 'score', 'win', 'sport', 'player', 'football', 'cricket', 'basketball'],
-        'business': ['business', 'company', 'market', 'profit', 'stock', 'finance', 'economy', 'investment'],
-        'entertainment': ['movie', 'music', 'film', 'celebrity', 'entertainment', 'show', 'hollywood']
-    }
-    text_lower = str(text).lower()
-    for topic, keywords in topics.items():
-        if any(kw in text_lower for kw in keywords):
-            return topic
-    return 'general'
-
-def extract_entities(text):
-    entities = []
-    text_lower = str(text).lower()
-    if 'president' in text_lower or 'prime minister' in text_lower or 'mr.' in text_lower or 'mrs.' in text_lower:
-        entities.append('PERSON')
-    if 'company' in text_lower or 'corp' in text_lower or 'inc' in text_lower or 'llc' in text_lower:
-        entities.append('ORGANIZATION')
-    if 'city' in text_lower or 'state' in text_lower or 'country' in text_lower or 'nation' in text_lower:
-        entities.append('LOCATION')
-    if 'university' in text_lower or 'college' in text_lower or 'school' in text_lower:
-        entities.append('ORGANIZATION')
-    return entities
+    return words[:5]
 
 sentiment_udf = udf(sentiment_analysis, StringType())
 keywords_udf = udf(extract_keywords, ArrayType(StringType()))
-topic_udf = udf(topic_classification, StringType())
-entities_udf = udf(extract_entities, ArrayType(StringType()))
 
-json_schema = StructType([
-    StructField("timestamp", StringType(), True),
-    StructField("text", StringType(), True),
-    StructField("langs", ArrayType(StringType()), True),
-    StructField("did", StringType(), True),
-    StructField("created_at", StringType(), True),
-    StructField("record_id", IntegerType(), True)
-])
-
-input_path = "s3://s3-bucket-x23424567/kinesis-data/"
-stream_df = spark.readStream \
-    .schema(json_schema) \
-    .json(input_path)
-
-processed_stream = stream_df \
-    .withColumn("sentiment", sentiment_udf(col("text"))) \
-    .withColumn("keywords", keywords_udf(col("text"))) \
-    .withColumn("topic", topic_udf(col("text"))) \
-    .withColumn("entities", entities_udf(col("text"))) \
-    .withWatermark("timestamp", "30 seconds")
-
-window_duration = "30 seconds"
-slide_duration = "5 seconds"
-
-# Sentiment Results
-sentiment_df = processed_stream \
-    .groupBy(window(col("timestamp"), window_duration, slide_duration), col("sentiment")) \
-    .agg(count("*").alias("count")) \
-    .select(
-        col("window.start").alias("window_start"),
-        col("window.end").alias("window_end"),
-        lit("sentiment").alias("metric_type"),
-        col("sentiment").alias("metric_name"),
-        col("count"),
-        lit(None).cast("int").alias("rank")
-    )
-
-# Trending Keywords
-trending_df = processed_stream \
-    .select(
-        window(col("timestamp"), window_duration, slide_duration),
-        explode(col("keywords")).alias("keyword")
-    ) \
-    .groupBy("window", "keyword") \
-    .agg(count("*").alias("count")) \
-    .orderBy(col("count").desc()) \
-    .limit(10) \
-    .select(
-        col("window.start").alias("window_start"),
-        col("window.end").alias("window_end"),
-        lit("trending").alias("metric_type"),
-        col("keyword").alias("metric_name"),
-        col("count"),
-        lit(None).cast("int").alias("rank")
-    )
-
-# Topic Results
-topic_df = processed_stream \
-    .groupBy(window(col("timestamp"), window_duration, slide_duration), col("topic")) \
-    .agg(count("*").alias("count")) \
-    .select(
-        col("window.start").alias("window_start"),
-        col("window.end").alias("window_end"),
-        lit("topic").alias("metric_type"),
-        col("topic").alias("metric_name"),
-        col("count"),
-        lit(None).cast("int").alias("rank")
-    )
-
-# NER Results
-ner_df = processed_stream \
-    .select(
-        window(col("timestamp"), window_duration, slide_duration),
-        explode(col("entities")).alias("entity")
-    ) \
-    .groupBy("window", "entity") \
-    .agg(count("*").alias("count")) \
-    .select(
-        col("window.start").alias("window_start"),
-        col("window.end").alias("window_end"),
-        lit("ner").alias("metric_type"),
-        col("entity").alias("metric_name"),
-        col("count"),
-        lit(None).cast("int").alias("rank")
-    )
-
-# Top 5 Keywords
-top5_df = processed_stream \
-    .select(
-        window(col("timestamp"), window_duration, slide_duration),
-        explode(col("keywords")).alias("keyword")
-    ) \
-    .groupBy("window", "keyword") \
-    .agg(count("*").alias("count")) \
-    .select(
-        col("window.start").alias("window_start"),
-        col("window.end").alias("window_end"),
-        col("keyword"),
-        col("count"),
-        row_number().over(Window.partitionBy("window.start", "window.end").orderBy(col("count").desc())).alias("rank")
-    ) \
-    .filter(col("rank") <= 5) \
-    .select(
-        col("window_start"),
-        col("window_end"),
-        lit("top5").alias("metric_type"),
-        col("keyword").alias("metric_name"),
-        col("count"),
-        col("rank")
-    )
-
-all_speed_results = sentiment_df.unionAll(trending_df) \
-    .unionAll(topic_df) \
-    .unionAll(ner_df) \
-    .unionAll(top5_df)
-
-# Write with custom file naming using foreachBatch
-# def write_batch(df, epoch_id):
-#     if df.count() == 0:
-#         return
+def save_json_to_s3(data, prefix, filename):
+    """Save JSON data to S3 using boto3"""
+    s3_client = boto3.client('s3')
+    bucket = 's3-bucket-x23424567'
     
-#     from datetime import datetime
-#     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#     output_path = f"s3://s3-bucket-x23424567/speed_results/speed_results_{timestamp}.json"
+    if not data:
+        return
     
-#     df.coalesce(1).write \
-#         .mode("append") \
-#         .format("json") \
-#         .option("path", output_path) \
-#         .save()
-    
-#     print(f"Batch written to: {output_path}")
+    content = '\n'.join([json.dumps(row) for row in data])
+    s3_client.put_object(
+        Bucket=bucket,
+        Key=f'{prefix}/{filename}',
+        Body=content.encode('utf-8')
+    )
+    print(f"Saved to s3://{bucket}/{prefix}/{filename}")
 
-def write_batch(df, epoch_id):
+def process_batch(df, batch_id):
     if df.count() == 0:
         return
     
-    from datetime import datetime
+    print(f"Processing {df.count()} records...")
+    
+    processed = df \
+        .withColumn("sentiment", sentiment_udf(col("text"))) \
+        .withColumn("keywords", keywords_udf(col("text")))
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = f"s3://s3-bucket-x23424567/results/speed/speed_results_{timestamp}.json"
     
-    df.coalesce(1).write \
-        .mode("append") \
-        .format("json") \
-        .option("path", output_path) \
-        .save()
+    # Collect results
+    sentiment_counts = processed.groupBy("sentiment") \
+        .agg(count("*").alias("count")) \
+        .collect()
     
-    print(f"Batch written to: {output_path}")
+    keyword_counts = processed.select(explode(col("keywords")).alias("keyword")) \
+        .groupBy("keyword") \
+        .agg(count("*").alias("count")) \
+        .orderBy(col("count").desc()) \
+        .limit(5) \
+        .collect()
+    
+    results = []
+    
+    for row in sentiment_counts:
+        results.append({
+            'window_start': timestamp,
+            'window_end': timestamp,
+            'metric_type': 'sentiment',
+            'metric_name': row['sentiment'],
+            'count': row['count'],
+            'rank': None
+        })
+    
+    for i, row in enumerate(keyword_counts):
+        results.append({
+            'window_start': timestamp,
+            'window_end': timestamp,
+            'metric_type': 'trending',
+            'metric_name': row['keyword'],
+            'count': row['count'],
+            'rank': i + 1
+        })
+    
+    # Save to S3 using boto3
+    save_json_to_s3(results, 'results/speed', f'speed_results_{timestamp}.json')
+    print(f"Processed {df.count()} records, saved to S3")
 
-# Write stream with foreachBatch
-query = all_speed_results.writeStream \
-    .foreachBatch(write_batch) \
-    .outputMode("append") \
-    .trigger(processingTime="5 seconds") \
-    .start()
+def read_and_process():
+    s3_client = boto3.client('s3')
+    bucket = 's3-bucket-x23424567'
+    prefix = 'kinesis-data/'
+    processed_keys = set()
+    
+    print("Speed Layer started. Checking for new files every 10 seconds...")
+    print(f"Reading from: s3://{bucket}/{prefix}")
+    
+    while True:
+        try:
+            response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
+            
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    key = obj['Key']
+                    
+                    if key in processed_keys or not key.endswith('.json'):
+                        continue
+                    
+                    print(f"Processing new file: {key}")
+                    
+                    file_response = s3_client.get_object(Bucket=bucket, Key=key)
+                    content = file_response['Body'].read().decode('utf-8')
+                    
+                    records = []
+                    for line in content.strip().split('\n'):
+                        if line.strip():
+                            try:
+                                records.append(json.loads(line))
+                            except:
+                                continue
+                    
+                    if records:
+                        # Limit batch size
+                        if len(records) > 500:
+                            records = records[:500]
+                        df = spark.createDataFrame(records)
+                        process_batch(df, key)
+                        processed_keys.add(key)
+            
+            time.sleep(10)
+            
+        except KeyboardInterrupt:
+            print("\nStopping Speed Layer...")
+            break
+        except Exception as e:
+            print(f"Error: {e}")
+            time.sleep(10)
 
-print("Speed Layer started successfully")
-print("Press Ctrl+C to stop")
-
-query.awaitTermination()
+if __name__ == "__main__":
+    print("=" * 50)
+    print("Speed Layer Started")
+    print("=" * 50)
+    try:
+        read_and_process()
+    except KeyboardInterrupt:
+        print("Speed Layer stopped")
+    finally:
+        spark.stop()

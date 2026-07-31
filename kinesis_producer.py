@@ -125,7 +125,6 @@
 
 # kinesis_producer.py
 
-
 import boto3
 import json
 import asyncio
@@ -150,6 +149,7 @@ async def bluesky_to_s3():
             print("Connected to Bluesky Jetstream")
             print("Writing to S3: s3://" + BUCKET_NAME + "/kinesis-data/")
             print("Press Ctrl+C to stop")
+            print("")
             
             while True:
                 try:
@@ -202,7 +202,9 @@ async def bluesky_to_s3():
         await bluesky_to_s3()
     except KeyboardInterrupt:
         elapsed = time.time() - start_time
-        print(f"\nStopped after {record_count} records in {elapsed:.2f} seconds")
+        print("")
+        print("Stopped after " + str(record_count) + " records in " + str(elapsed) + " seconds")
+        print("Average throughput: " + str(record_count/elapsed) + " rec/sec")
 
 if __name__ == '__main__':
     print("Bluesky to S3 Producer")
