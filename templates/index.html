@@ -142,6 +142,7 @@
         .badge-positive { background: #d4edda; color: #155724; }
         .badge-negative { background: #f8d7da; color: #721c24; }
         .badge-neutral { background: #e2e3e5; color: #383d41; }
+        .badge-entity { background: #cce5ff; color: #004085; }
         
         .chart-container {
             height: 250px;
@@ -305,6 +306,13 @@
         </div>
         
         <div class="card">
+            <h3>Batch Entity Distribution (NER)</h3>
+            <div class="chart-container">
+                <canvas id="batchEntityChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card full-width">
             <h3>Speed Trending Keywords</h3>
             <div class="table-wrapper">
                 <table>
@@ -390,9 +398,11 @@
             
             const sentiment = batch.filter(row => row.metric_type === 'sentiment');
             const topics = batch.filter(row => row.metric_type === 'topic');
+            const entities = batch.filter(row => row.metric_type === 'entity');
             
             updateChart('batchSentimentChart', sentiment, 'metric_name', 'count', 'Sentiment Distribution');
             updateChart('batchTopicsChart', topics, 'metric_name', 'count', 'Topic Distribution');
+            updateChart('batchEntityChart', entities, 'metric_name', 'count', 'Entity Distribution');
         }
         
         function updateSpeedTables(speed) {
@@ -438,9 +448,17 @@
                 return;
             }
             
-            const labels = data.map(row => row[labelKey] || 'Unknown');
-            const values = data.map(row => parseInt(row[valueKey] || 0));
-            const colors = ['#4a90d9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#3498db'];
+            // Aggregate data - group by metric_name and sum counts
+            const aggregated = {};
+            data.forEach(row => {
+                const key = row[labelKey] || 'Unknown';
+                aggregated[key] = (aggregated[key] || 0) + parseInt(row[valueKey] || 0);
+            });
+            
+            const labels = Object.keys(aggregated);
+            const values = Object.values(aggregated);
+            
+            const colors = ['#4a90d9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#3498db', '#95a5a6'];
             
             charts[chartId] = new Chart(ctx, {
                 type: 'doughnut',
@@ -537,33 +555,28 @@
                 return;
             }
             
+            // Group by timestamp and sentiment
             const grouped = {};
             sentimentData.forEach(row => {
                 const key = row.metric_name || 'Unknown';
-                if (!grouped[key]) grouped[key] = [];
-                grouped[key].push({
-                    timestamp: row.window_start || '',
-                    count: parseInt(row.count || 0)
-                });
+                const ts = row.window_start || '';
+                if (!grouped[key]) grouped[key] = {};
+                grouped[key][ts] = (grouped[key][ts] || 0) + parseInt(row.count || 0);
             });
             
-            const allTimestamps = [...new Set(sentimentData.map(row => row.window_start))].sort();
-            const labels = allTimestamps.map(ts => ts ? ts.substring(11, 19) : '');
+            // Get all unique timestamps sorted
+            const allTimestamps = [...new Set(sentimentData.map(row => row.window_start))].filter(t => t).sort();
+            const labels = allTimestamps.map(ts => ts.substring(11, 19));
             
-            const datasets = Object.keys(grouped).map((key, index) => {
-                const colorMap = {
-                    'Positive': '#2ecc71',
-                    'Negative': '#e74c3c',
-                    'Neutral': '#f39c12'
-                };
-                const color = colorMap[key] || `hsl(${index * 120}, 70%, 50%)`;
-                
-                const dataMap = {};
-                grouped[key].forEach(item => {
-                    dataMap[item.timestamp] = item.count;
-                });
-                
-                const data = allTimestamps.map(ts => dataMap[ts] || 0);
+            const colorMap = {
+                'Positive': '#2ecc71',
+                'Negative': '#e74c3c',
+                'Neutral': '#f39c12'
+            };
+            
+            const datasets = Object.keys(grouped).map(key => {
+                const color = colorMap[key] || '#4a90d9';
+                const data = allTimestamps.map(ts => grouped[key][ts] || 0);
                 
                 return {
                     label: key,

@@ -1,55 +1,73 @@
 
 
-
+# speed_layer.py - PySpark Streaming with MapReduce Pattern
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
+from pyspark.sql.window import Window
 from textblob import TextBlob
 import time
 import boto3
 import json
 from datetime import datetime
+import pytz
+import traceback
 
-print("Starting Speed Layer...")
+print("=" * 60)
+print("SPEED LAYER STARTING (PySpark MapReduce)")
+print("=" * 60)
+
+LOCAL_TIMEZONE = pytz.timezone('Asia/Kolkata')
+
+def get_local_timestamp():
+    return datetime.now(LOCAL_TIMEZONE).strftime("%Y%m%d_%H%M%S")
+
+def get_local_datetime():
+    return datetime.now(LOCAL_TIMEZONE)
 
 spark = SparkSession.builder \
     .appName("SpeedLayer") \
     .config("spark.sql.shuffle.partitions", "1") \
+    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
     .getOrCreate()
 
 spark.sparkContext.setLogLevel("WARN")
 
-def sentiment_analysis(text):
+# ============ MAPPER FUNCTIONS ============
+
+def map_sentiment(text):
+    """MAP: Extract sentiment from text"""
     try:
         if not text:
-            return "Neutral"
+            return ("Neutral", 1)
         blob = TextBlob(str(text))
         polarity = blob.sentiment.polarity
         if polarity > 0.1:
-            return "Positive"
+            return ("Positive", 1)
         elif polarity < -0.1:
-            return "Negative"
+            return ("Negative", 1)
         else:
-            return "Neutral"
+            return ("Neutral", 1)
     except:
-        return "Neutral"
+        return ("Neutral", 1)
 
-def extract_keywords(text):
+def map_keywords(text):
+    """MAP: Extract keywords from text"""
     if not text:
         return []
     words = str(text).lower().split()
     stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'for', 
                  'with', 'without', 'of', 'to', 'is', 'i', 'you', 'we', 'they', 
-                 'he', 'she', 'it', 'my', 'your', 'our', 'their'}
-    words = [w for w in words if w not in stopwords and len(w) > 3]
-    return words[:5]
+                 'he', 'she', 'it', 'my', 'your', 'our', 'their', 'from', 'this',
+                 'that', 'these', 'those', 'then', 'than', 'so', 'too', 'very'}
+    return [(w, 1) for w in words if w not in stopwords and len(w) > 3]
 
-sentiment_udf = udf(sentiment_analysis, StringType())
-keywords_udf = udf(extract_keywords, ArrayType(StringType()))
+def reduce_counts(rdd):
+    """REDUCE: Sum up counts"""
+    return rdd.reduceByKey(lambda a, b: a + b)
 
 def save_json_to_s3(data, prefix, filename):
-    """Save JSON data to S3 using boto3"""
     s3_client = boto3.client('s3')
     bucket = 's3-bucket-x23424567'
     
@@ -70,49 +88,54 @@ def process_batch(df, batch_id):
     
     print(f"Processing {df.count()} records...")
     
-    processed = df \
-        .withColumn("sentiment", sentiment_udf(col("text"))) \
-        .withColumn("keywords", keywords_udf(col("text")))
+    # Convert to RDD for MapReduce
+    rdd = df.rdd.map(lambda row: row.asDict())
     
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # Extract text field
+    text_rdd = rdd.map(lambda x: x.get('text', '')).filter(lambda x: x and len(x) > 0)
+    total_records = text_rdd.count()
     
-    # Collect results
-    sentiment_counts = processed.groupBy("sentiment") \
-        .agg(count("*").alias("count")) \
-        .collect()
+    if total_records == 0:
+        print("No valid text records")
+        return
     
-    keyword_counts = processed.select(explode(col("keywords")).alias("keyword")) \
-        .groupBy("keyword") \
-        .agg(count("*").alias("count")) \
-        .orderBy(col("count").desc()) \
-        .limit(5) \
-        .collect()
-    
+    print(f"Valid records: {total_records}")
+    timestamp = get_local_timestamp()
     results = []
     
-    for row in sentiment_counts:
+    # ============ MAPREDUCE: SENTIMENT ============
+    sentiment_rdd = text_rdd.flatMap(lambda text: [map_sentiment(text)])
+    sentiment_counts = reduce_counts(sentiment_rdd).collect()
+    
+    for sentiment, count in sentiment_counts:
         results.append({
             'window_start': timestamp,
             'window_end': timestamp,
             'metric_type': 'sentiment',
-            'metric_name': row['sentiment'],
-            'count': row['count'],
+            'metric_name': sentiment,
+            'count': count,
             'rank': None
         })
     
-    for i, row in enumerate(keyword_counts):
+    # ============ MAPREDUCE: KEYWORDS ============
+    keyword_rdd = text_rdd.flatMap(lambda text: map_keywords(text))
+    keyword_counts = reduce_counts(keyword_rdd) \
+        .sortBy(lambda x: x[1], ascending=False) \
+        .take(5)
+    
+    for i, (keyword, count) in enumerate(keyword_counts):
         results.append({
             'window_start': timestamp,
             'window_end': timestamp,
             'metric_type': 'trending',
-            'metric_name': row['keyword'],
-            'count': row['count'],
+            'metric_name': keyword,
+            'count': count,
             'rank': i + 1
         })
     
-    # Save to S3 using boto3
-    save_json_to_s3(results, 'results/speed', f'speed_results_{timestamp}.json')
-    print(f"Processed {df.count()} records, saved to S3")
+    if results:
+        save_json_to_s3(results, 'results/speed', f'speed_results_{timestamp}.json')
+        print(f"Processed {total_records} records, saved {len(results)} results")
 
 def read_and_process():
     s3_client = boto3.client('s3')
@@ -122,6 +145,7 @@ def read_and_process():
     
     print("Speed Layer started. Checking for new files every 10 seconds...")
     print(f"Reading from: s3://{bucket}/{prefix}")
+    print(f"Local timezone: {LOCAL_TIMEZONE.zone}")
     
     while True:
         try:
@@ -136,24 +160,34 @@ def read_and_process():
                     
                     print(f"Processing new file: {key}")
                     
-                    file_response = s3_client.get_object(Bucket=bucket, Key=key)
-                    content = file_response['Body'].read().decode('utf-8')
+                    try:
+                        file_response = s3_client.get_object(Bucket=bucket, Key=key)
+                        content = file_response['Body'].read().decode('utf-8')
+                    except Exception as e:
+                        print(f"Error reading file: {e}")
+                        continue
                     
                     records = []
                     for line in content.strip().split('\n'):
                         if line.strip():
                             try:
-                                records.append(json.loads(line))
+                                record = json.loads(line)
+                                if record.get('text'):
+                                    records.append(record)
                             except:
                                 continue
                     
                     if records:
-                        # Limit batch size
                         if len(records) > 500:
                             records = records[:500]
-                        df = spark.createDataFrame(records)
-                        process_batch(df, key)
-                        processed_keys.add(key)
+                        
+                        try:
+                            df = spark.createDataFrame(records)
+                            process_batch(df, key)
+                            processed_keys.add(key)
+                        except Exception as e:
+                            print(f"Error processing: {e}")
+                            continue
             
             time.sleep(10)
             
@@ -162,15 +196,14 @@ def read_and_process():
             break
         except Exception as e:
             print(f"Error: {e}")
+            traceback.print_exc()
             time.sleep(10)
 
 if __name__ == "__main__":
-    print("=" * 50)
-    print("Speed Layer Started")
-    print("=" * 50)
     try:
         read_and_process()
     except KeyboardInterrupt:
         print("Speed Layer stopped")
     finally:
         spark.stop()
+        print("Speed Layer finished")

@@ -1,12 +1,12 @@
 
-
-
 # dashboard.py
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import boto3
 import time
 import os
+from datetime import datetime
+import pytz
 
 app = Flask(__name__)
 CORS(app)
@@ -15,6 +15,13 @@ CORS(app)
 athena_client = boto3.client('athena', region_name='us-east-1')
 BUCKET_NAME = 's3-bucket-x23424567'
 ATHENA_OUTPUT = f's3://{BUCKET_NAME}/athena-results/'
+
+# Timezone configuration
+LOCAL_TIMEZONE = pytz.timezone('Asia/Kolkata')  # Change to your timezone
+
+def get_local_timestamp():
+    """Get current timestamp in local timezone"""
+    return datetime.now(LOCAL_TIMEZONE).strftime('%Y-%m-%d %H:%M:%S %Z')
 
 def run_athena_query(query):
     try:
@@ -105,9 +112,39 @@ def get_metrics():
     metrics = {
         'batch_total': batch_total,
         'speed_total': speed_total,
-        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+        'timestamp': get_local_timestamp()
     }
     return jsonify(metrics)
+
+@app.route('/api/entities', methods=['GET'])
+def get_entities():
+    """Get NER results from batch layer"""
+    query = """
+    SELECT 
+        metric_name,
+        count,
+        percentage
+    FROM batch_results
+    WHERE metric_type = 'entity'
+    ORDER BY count DESC
+    """
+    results = run_athena_query(query)
+    return jsonify(results)
+
+@app.route('/api/batch-topics', methods=['GET'])
+def get_batch_topics():
+    """Get topic distribution from batch layer"""
+    query = """
+    SELECT 
+        metric_name,
+        count,
+        percentage
+    FROM batch_results
+    WHERE metric_type = 'topic'
+    ORDER BY count DESC
+    """
+    results = run_athena_query(query)
+    return jsonify(results)
 
 @app.route('/')
 def index():
@@ -115,10 +152,14 @@ def index():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({'status': 'healthy', 'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')})
+    return jsonify({
+        'status': 'healthy', 
+        'timestamp': get_local_timestamp()
+    })
 
 if __name__ == '__main__':
     print("Starting Dashboard Server...")
     print("Access dashboard at: http://localhost:5000")
     print("Or use: Run -> Preview Running Application in Cloud9")
     app.run(host='0.0.0.0', port=5000, debug=False)
+    
