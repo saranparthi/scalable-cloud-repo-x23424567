@@ -1,4 +1,4 @@
-
+# benchmark.py
 #!/usr/bin/env python3
 """
 Performance Benchmark for Lambda Architecture
@@ -156,26 +156,71 @@ def run_sequential(records, total_valid):
     
     return total_time, total_valid/total_time
 
+# def run_parallel(records, total_valid, workers):
+    
+#     sc = spark.sparkContext
+    
+#     rdd = sc.parallelize(records, workers)
+    
+#     text_rdd = rdd.map(lambda x: x.get("text", "")) \
+#                   .filter(lambda x: x and len(x) > 0)
+    
+#     sentiment_counts = reduce_counts(
+#         text_rdd.flatMap(lambda text: [map_sentiment(text)])
+#     ).collect()
+    
+#     keyword_counts = reduce_counts(
+#         text_rdd.flatMap(map_keywords)
+#     ).sortBy(lambda x: x[1], ascending=False).take(20)
+    
+#     topic_counts = reduce_counts(
+#         text_rdd.map(map_topic)
+#     ).collect()
+
+
+
+
 def run_parallel(records, total_valid, workers):
-    
+    """Run parallel processing"""
+
+    print(f"\n--- PARALLEL MODE ({workers} cores) ---")
+
+    start_time = time.time()
+
     sc = spark.sparkContext
-    
+
     rdd = sc.parallelize(records, workers)
-    
-    text_rdd = rdd.map(lambda x: x.get("text", "")) \
-                  .filter(lambda x: x and len(x) > 0)
-    
+
+    text_rdd = (
+        rdd.map(lambda x: x.get("text", ""))
+           .filter(lambda x: x and len(x) > 0)
+    )
+
     sentiment_counts = reduce_counts(
         text_rdd.flatMap(lambda text: [map_sentiment(text)])
     ).collect()
-    
+
     keyword_counts = reduce_counts(
         text_rdd.flatMap(map_keywords)
     ).sortBy(lambda x: x[1], ascending=False).take(20)
-    
+
     topic_counts = reduce_counts(
         text_rdd.map(map_topic)
     ).collect()
+
+    end_time = time.time()
+
+    total_time = end_time - start_time
+
+    throughput = total_valid / total_time if total_time > 0 else 0
+
+    print(f"Parallel processing completed in {total_time:.2f} seconds")
+    print(f"Processed {total_valid} records")
+    print(f"Throughput: {throughput:.2f} rec/sec")
+
+    return total_time, throughput
+
+
 
 def measure_latency(records, ingestion_rate):
     """Measure latency at different ingestion rates"""
@@ -214,7 +259,7 @@ def measure_latency(records, ingestion_rate):
     
     return avg_latency, p95_latency, max_latency
 
-def generate_graphs(results_df, output_dir):
+def generate_graphs(results_df,latency_df, output_dir):
     """Generate all benchmark graphs"""
     print("\n--- Generating Graphs ---")
     
@@ -271,20 +316,69 @@ def generate_graphs(results_df, output_dir):
     print("  Saved: throughput_comparison.png")
     
     # Graph 4: Latency vs Ingestion Rate
-    if 'ingestion_rate' in results_df.columns and 'avg_latency' in results_df.columns:
-        plt.figure(figsize=(10, 6))
-        plt.plot(results_df['ingestion_rate'], results_df['avg_latency'], 'ro-', label='Avg Latency')
-        plt.plot(results_df['ingestion_rate'], results_df['p95_latency'], 'bo-', label='P95 Latency')
-        plt.plot(results_df['ingestion_rate'], results_df['max_latency'], 'go-', label='Max Latency')
+    # if 'ingestion_rate' in results_df.columns and 'avg_latency' in results_df.columns:
+    #     plt.figure(figsize=(10, 6))
+    #     plt.plot(results_df['ingestion_rate'], results_df['avg_latency'], 'ro-', label='Avg Latency')
+    #     plt.plot(results_df['ingestion_rate'], results_df['p95_latency'], 'bo-', label='P95 Latency')
+    #     plt.plot(results_df['ingestion_rate'], results_df['max_latency'], 'go-', label='Max Latency')
         
-        plt.xlabel('Ingestion Rate (records/sec)')
-        plt.ylabel('Latency (ms)')
-        plt.title('Latency vs Ingestion Rate')
-        plt.legend()
+    #     plt.xlabel('Ingestion Rate (records/sec)')
+    #     plt.ylabel('Latency (ms)')
+    #     plt.title('Latency vs Ingestion Rate')
+    #     plt.legend()
+    #     plt.grid(True)
+    #     plt.savefig(f'{output_dir}/latency_vs_ingestion.png', dpi=150, bbox_inches='tight')
+    #     plt.close()
+    #     print("  Saved: latency_vs_ingestion.png")
+    
+    
+    # Graph 4: Latency vs Ingestion Rate
+    if not latency_df.empty:
+    
+        latency_df = latency_df.sort_values("ingestion_rate")
+    
+        plt.figure(figsize=(10,6))
+    
+        plt.plot(
+            latency_df["ingestion_rate"],
+            latency_df["avg_latency"],
+            marker="o",
+            linewidth=2,
+            label="Average Latency"
+        )
+    
+        plt.plot(
+            latency_df["ingestion_rate"],
+            latency_df["p95_latency"],
+            marker="s",
+            linewidth=2,
+            label="P95 Latency"
+        )
+    
+        plt.plot(
+            latency_df["ingestion_rate"],
+            latency_df["max_latency"],
+            marker="^",
+            linewidth=2,
+            label="Maximum Latency"
+        )
+    
+        plt.xlabel("Ingestion Rate (records/sec)")
+        plt.ylabel("Latency (ms)")
+        plt.title("Latency vs Ingestion Rate")
         plt.grid(True)
-        plt.savefig(f'{output_dir}/latency_vs_ingestion.png', dpi=150, bbox_inches='tight')
+        plt.legend()
+    
+        plt.savefig(
+            f"{output_dir}/latency_vs_ingestion.png",
+            dpi=150,
+            bbox_inches="tight"
+        )
+    
         plt.close()
+    
         print("  Saved: latency_vs_ingestion.png")
+    
 
 def save_results_to_s3(data, filename):
     """Save results to S3"""
@@ -418,12 +512,12 @@ def main():
         latency_df = pd.DataFrame(latency_results)
         
         # Merge for combined results
-        if not results_df.empty and not latency_df.empty:
-            # Add latency data to results for graphing
-            results_df['ingestion_rate'] = None
-            results_df['avg_latency'] = None
-            results_df['p95_latency'] = None
-            results_df['max_latency'] = None
+        # if not results_df.empty and not latency_df.empty:
+        #     # Add latency data to results for graphing
+        #     results_df['ingestion_rate'] = None
+        #     results_df['avg_latency'] = None
+        #     results_df['p95_latency'] = None
+        #     results_df['max_latency'] = None
         
         # Save results
         save_results_to_s3(results_df, 'benchmark_results.csv')
@@ -432,7 +526,7 @@ def main():
         
         # Generate graphs
         if not results_df.empty:
-            generate_graphs(results_df, output_dir)
+            generate_graphs(results_df, latency_df, output_dir)
             
             # Also save graphs to S3
             for file in os.listdir(output_dir):

@@ -156,6 +156,78 @@ def health():
         'status': 'healthy', 
         'timestamp': get_local_timestamp()
     })
+    
+    
+    
+
+@app.route('/api/benchmark-results', methods=['GET'])
+def get_benchmark_results():
+    """Get benchmark results from S3"""
+    try:
+        s3_client = boto3.client('s3')
+        bucket = BUCKET_NAME
+        prefix = 'benchmark-results/'
+        
+        response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
+        if 'Contents' not in response:
+            return jsonify([])
+        
+        # Find the latest benchmark_results.csv
+        latest_file = None
+        latest_time = None
+        for obj in response['Contents']:
+            if obj['Key'].endswith('benchmark_results.csv'):
+                if latest_time is None or obj['LastModified'] > latest_time:
+                    latest_time = obj['LastModified']
+                    latest_file = obj['Key']
+        
+        if not latest_file:
+            return jsonify([])
+        
+        file_response = s3_client.get_object(Bucket=bucket, Key=latest_file)
+        content = file_response['Body'].read().decode('utf-8')
+        import csv
+        import io
+        csv_data = list(csv.DictReader(io.StringIO(content)))
+        return jsonify(csv_data)
+    except Exception as e:
+        print(f"Error fetching benchmark: {e}")
+        return jsonify([])
+
+@app.route('/api/benchmark-latency', methods=['GET'])
+def get_benchmark_latency():
+    """Get latency results from S3"""
+    try:
+        s3_client = boto3.client('s3')
+        bucket = BUCKET_NAME
+        prefix = 'benchmark-results/'
+        
+        response = s3_client.list_objects_v2(Bucket=bucket, Prefix=prefix)
+        if 'Contents' not in response:
+            return jsonify([])
+        
+        latest_file = None
+        latest_time = None
+        for obj in response['Contents']:
+            if obj['Key'].endswith('latency_results.csv'):
+                if latest_time is None or obj['LastModified'] > latest_time:
+                    latest_time = obj['LastModified']
+                    latest_file = obj['Key']
+        
+        if not latest_file:
+            return jsonify([])
+        
+        file_response = s3_client.get_object(Bucket=bucket, Key=latest_file)
+        content = file_response['Body'].read().decode('utf-8')
+        import csv
+        import io
+        csv_data = list(csv.DictReader(io.StringIO(content)))
+        return jsonify(csv_data)
+    except Exception as e:
+        print(f"Error fetching latency: {e}")
+        return jsonify([])
+
+    
 
 if __name__ == '__main__':
     print("Starting Dashboard Server...")
@@ -163,3 +235,6 @@ if __name__ == '__main__':
     print("Or use: Run -> Preview Running Application in Cloud9")
     app.run(host='0.0.0.0', port=5000, debug=False)
     
+
+
+

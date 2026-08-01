@@ -38,6 +38,47 @@
             margin-top: 8px;
         }
         
+        /* Tab Styles */
+        .tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 24px;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        
+        .tab-btn {
+            padding: 16px 32px;
+            border: none;
+            background: white;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: #6b7280;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+        }
+        
+        .tab-btn:hover {
+            background: #f8f9fa;
+        }
+        
+        .tab-btn.active {
+            color: #1a1a2e;
+            border-bottom-color: #4a90d9;
+            background: #f8f9fa;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
         .kpi-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -210,25 +251,36 @@
             margin-top: 16px;
         }
         
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #6b7280;
+        .benchmark-table {
+            font-size: 13px;
         }
         
-        .loading-spinner {
-            border: 3px solid #f0f2f5;
-            border-top: 3px solid #4a90d9;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 16px;
+        .benchmark-table th {
+            background: #1a1a2e;
+            color: white;
         }
         
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .benchmark-table tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+        
+        .benchmark-table tr:hover {
+            background: #e8f0fe;
+        }
+        
+        .speedup-high {
+            color: #2ecc71;
+            font-weight: bold;
+        }
+        
+        .speedup-medium {
+            color: #f39c12;
+            font-weight: bold;
+        }
+        
+        .speedup-low {
+            color: #e74c3c;
+            font-weight: bold;
         }
         
         @media (max-width: 768px) {
@@ -238,6 +290,17 @@
             
             .kpi-grid {
                 grid-template-columns: 1fr 1fr;
+            }
+            
+            .tabs {
+                flex-wrap: wrap;
+            }
+            
+            .tab-btn {
+                flex: 1;
+                text-align: center;
+                padding: 12px;
+                font-size: 14px;
             }
         }
     </style>
@@ -263,90 +326,190 @@
             <button onclick="refreshData()">Refresh Now</button>
         </div>
     </div>
-    
-    <div class="kpi-grid" id="kpiGrid">
-        <div class="kpi-card">
-            <div class="kpi-label">Batch Total Records</div>
-            <div class="kpi-value" id="batchTotal">-</div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="realtime" onclick="switchTab('realtime')">📊 Real-Time Analytics</button>
+        <!--<button class="tab-btn" data-tab="benchmark" onclick="switchTab('benchmark')">⚡ Performance Benchmark</button>-->
+    </div>
+
+    <!-- Tab 1: Real-Time Analytics -->
+    <div id="tab-realtime" class="tab-content active">
+        <div class="kpi-grid" id="kpiGrid">
+            <div class="kpi-card">
+                <div class="kpi-label">Batch Total Records</div>
+                <div class="kpi-value" id="batchTotal">-</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Speed Events (Latest Window)</div>
+                <div class="kpi-value" id="speedTotal">-</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Unique Keywords</div>
+                <div class="kpi-value" id="uniqueKeywords">-</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Window Timestamp</div>
+                <div class="kpi-value" id="windowTimestamp" style="font-size:16px;">-</div>
+            </div>
         </div>
-        <div class="kpi-card">
-            <div class="kpi-label">Speed Events (Latest Window)</div>
-            <div class="kpi-value" id="speedTotal">-</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-label">Unique Keywords</div>
-            <div class="kpi-value" id="uniqueKeywords">-</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-label">Window Timestamp</div>
-            <div class="kpi-value" id="windowTimestamp" style="font-size:16px;">-</div>
+
+        <div class="dashboard-grid">
+            <div class="card">
+                <h3>Batch Sentiment Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="batchSentimentChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Speed Sentiment Distribution (Latest Window)</h3>
+                <div class="chart-container">
+                    <canvas id="speedSentimentChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Batch Topic Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="batchTopicsChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h3>Batch Entity Distribution (NER)</h3>
+                <div class="chart-container">
+                    <canvas id="batchEntityChart"></canvas>
+                </div>
+            </div>
+            
+            <div class="card full-width">
+                <h3>Speed Trending Keywords</h3>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Keyword</th>
+                                <th>Count</th>
+                            </tr>
+                        </thead>
+                        <tbody id="trendingTable">
+                            <tr><td colspan="3" style="text-align:center;color:#6b7280;">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="card full-width">
+                <h3>Sentiment Trends Over Time</h3>
+                <div class="chart-container-history">
+                    <canvas id="historyChart"></canvas>
+                </div>
+            </div>
         </div>
     </div>
-    
-    <div class="dashboard-grid">
-        <div class="card">
-            <h3>Batch Sentiment Distribution</h3>
-            <div class="chart-container">
-                <canvas id="batchSentimentChart"></canvas>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h3>Speed Sentiment Distribution (Latest Window)</h3>
-            <div class="chart-container">
-                <canvas id="speedSentimentChart"></canvas>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h3>Batch Topic Distribution</h3>
-            <div class="chart-container">
-                <canvas id="batchTopicsChart"></canvas>
-            </div>
-        </div>
-        
-        <div class="card">
-            <h3>Batch Entity Distribution (NER)</h3>
-            <div class="chart-container">
-                <canvas id="batchEntityChart"></canvas>
-            </div>
-        </div>
-        
-        <div class="card full-width">
-            <h3>Speed Trending Keywords</h3>
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Rank</th>
-                            <th>Keyword</th>
-                            <th>Count</th>
-                        </tr>
-                    </thead>
-                    <tbody id="trendingTable">
-                        <tr><td colspan="3" style="text-align:center;color:#6b7280;">Loading...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-        
-        <div class="card full-width">
-            <h3>Sentiment Trends Over Time</h3>
-            <div class="chart-container-history">
-                <canvas id="historyChart"></canvas>
-            </div>
-        </div>
-    </div>
-    
+
+    <!-- Tab 2: Benchmark Results -->
+    <!--<div id="tab-benchmark" class="tab-content">-->
+    <!--    <div class="kpi-grid">-->
+    <!--        <div class="kpi-card">-->
+    <!--            <div class="kpi-label">Benchmark Status</div>-->
+    <!--            <div class="kpi-value" id="benchmarkStatus">Loading...</div>-->
+    <!--        </div>-->
+    <!--        <div class="kpi-card">-->
+    <!--            <div class="kpi-label">Best Speedup</div>-->
+    <!--            <div class="kpi-value" id="bestSpeedup">-</div>-->
+    <!--        </div>-->
+    <!--        <div class="kpi-card">-->
+    <!--            <div class="kpi-label">Best Throughput</div>-->
+    <!--            <div class="kpi-value" id="bestThroughput">-</div>-->
+    <!--        </div>-->
+    <!--        <div class="kpi-card">-->
+    <!--            <div class="kpi-label">Last Updated</div>-->
+    <!--            <div class="kpi-value" id="benchmarkTimestamp" style="font-size:16px;">-</div>-->
+    <!--        </div>-->
+    <!--    </div>-->
+
+    <!--    <div class="card full-width">-->
+    <!--        <h3>📊 Speedup vs Worker Count</h3>-->
+    <!--        <div class="chart-container" style="height:300px;">-->
+    <!--            <canvas id="benchmarkSpeedupChart"></canvas>-->
+    <!--        </div>-->
+    <!--    </div>-->
+
+    <!--    <div class="card full-width">-->
+    <!--        <h3>📈 Throughput Comparison</h3>-->
+    <!--        <div class="chart-container" style="height:300px;">-->
+    <!--            <canvas id="benchmarkThroughputChart"></canvas>-->
+    <!--        </div>-->
+    <!--    </div>-->
+
+    <!--    <div class="card full-width">-->
+    <!--        <h3>📋 Benchmark Results Table</h3>-->
+    <!--        <div class="table-wrapper" style="max-height:400px;">-->
+    <!--            <table class="benchmark-table">-->
+    <!--                <thead>-->
+    <!--                    <tr>-->
+    <!--                        <th>Workload</th>-->
+    <!--                        <th>Mode</th>-->
+    <!--                        <th>Workers</th>-->
+    <!--                        <th>Time (s)</th>-->
+    <!--                        <th>Throughput</th>-->
+    <!--                        <th>Speedup</th>-->
+    <!--                        <th>Efficiency</th>-->
+    <!--                    </tr>-->
+    <!--                </thead>-->
+    <!--                <tbody id="benchmarkTableBody">-->
+    <!--                    <tr><td colspan="7" style="text-align:center;color:#6b7280;">No benchmark data available. Run ./run_benchmark.sh</td></tr>-->
+    <!--                </tbody>-->
+    <!--            </table>-->
+    <!--        </div>-->
+    <!--    </div>-->
+
+    <!--    <div class="card full-width">-->
+    <!--        <h3>⏱️ Latency vs Ingestion Rate</h3>-->
+    <!--        <div class="table-wrapper" style="max-height:200px;">-->
+    <!--            <table class="benchmark-table">-->
+    <!--                <thead>-->
+    <!--                    <tr>-->
+    <!--                        <th>Ingestion Rate (rec/sec)</th>-->
+    <!--                        <th>Avg Latency (ms)</th>-->
+    <!--                        <th>P95 Latency (ms)</th>-->
+    <!--                        <th>Max Latency (ms)</th>-->
+    <!--                    </tr>-->
+    <!--                </thead>-->
+    <!--                <tbody id="latencyTableBody">-->
+    <!--                    <tr><td colspan="4" style="text-align:center;color:#6b7280;">No latency data available</td></tr>-->
+    <!--                </tbody>-->
+    <!--            </table>-->
+    <!--        </div>-->
+    <!--    </div>-->
+    <!--</div>-->
+
     <div class="last-updated" id="lastUpdated">Last updated: -</div>
-    
+
     <script>
         const API_BASE = '';
         let refreshInterval = null;
         let charts = {};
         let batchData = null;
         let speedData = null;
-        
+        let benchmarkData = null;
+
+        // ============ TAB SWITCHING ============
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+            document.querySelector(`.tab-btn[data-tab="${tabName}"]`).classList.add('active');
+            
+            if (tabName === 'benchmark') {
+                loadBenchmarkData();
+            }
+        }
+
+        // ============ API FETCH ============
         async function fetchAPI(endpoint) {
             try {
                 const response = await fetch(`/api/${endpoint}`);
@@ -357,7 +520,8 @@
                 return null;
             }
         }
-        
+
+        // ============ SENTIMENT CLASS ============
         function getSentimentClass(sentiment) {
             const map = {
                 'Positive': 'badge-positive',
@@ -366,7 +530,8 @@
             };
             return map[sentiment] || 'badge-neutral';
         }
-        
+
+        // ============ KPI UPDATE ============
         function updateKPIs(batch, speed) {
             let batchTotal = 0;
             let speedTotal = 0;
@@ -392,32 +557,8 @@
             document.getElementById('uniqueKeywords').textContent = uniqueKeywords;
             document.getElementById('windowTimestamp').textContent = windowTimestamp;
         }
-        
-        function updateBatchTables(batch) {
-            if (!batch) return;
-            
-            const sentiment = batch.filter(row => row.metric_type === 'sentiment');
-            const topics = batch.filter(row => row.metric_type === 'topic');
-            const entities = batch.filter(row => row.metric_type === 'entity');
-            
-            updateChart('batchSentimentChart', sentiment, 'metric_name', 'count', 'Sentiment Distribution');
-            updateChart('batchTopicsChart', topics, 'metric_name', 'count', 'Topic Distribution');
-            updateChart('batchEntityChart', entities, 'metric_name', 'count', 'Entity Distribution');
-        }
-        
-        function updateSpeedTables(speed) {
-            if (!speed) return;
-            
-            const sentiment = speed.filter(row => row.metric_type === 'sentiment');
-            const trending = speed.filter(row => row.metric_type === 'trending');
-            const top5 = speed.filter(row => row.metric_type === 'top5');
-            
-            updateChart('speedSentimentChart', sentiment, 'metric_name', 'count', 'Sentiment Distribution');
-            
-            const trendingRows = top5.length > 0 ? top5 : trending;
-            updateTrendingTable(trendingRows);
-        }
-        
+
+        // ============ CHART UPDATE ============
         function updateChart(chartId, data, labelKey, valueKey, title) {
             const ctx = document.getElementById(chartId).getContext('2d');
             
@@ -448,7 +589,6 @@
                 return;
             }
             
-            // Aggregate data - group by metric_name and sum counts
             const aggregated = {};
             data.forEach(row => {
                 const key = row[labelKey] || 'Unknown';
@@ -457,7 +597,6 @@
             
             const labels = Object.keys(aggregated);
             const values = Object.values(aggregated);
-            
             const colors = ['#4a90d9', '#e74c3c', '#2ecc71', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#3498db', '#95a5a6'];
             
             charts[chartId] = new Chart(ctx, {
@@ -486,7 +625,35 @@
                 }
             });
         }
-        
+
+        // ============ BATCH TABLES ============
+        function updateBatchTables(batch) {
+            if (!batch) return;
+            
+            const sentiment = batch.filter(row => row.metric_type === 'sentiment');
+            const topics = batch.filter(row => row.metric_type === 'topic');
+            const entities = batch.filter(row => row.metric_type === 'entity');
+            
+            updateChart('batchSentimentChart', sentiment, 'metric_name', 'count', 'Sentiment Distribution');
+            updateChart('batchTopicsChart', topics, 'metric_name', 'count', 'Topic Distribution');
+            updateChart('batchEntityChart', entities, 'metric_name', 'count', 'Entity Distribution');
+        }
+
+        // ============ SPEED TABLES ============
+        function updateSpeedTables(speed) {
+            if (!speed) return;
+            
+            const sentiment = speed.filter(row => row.metric_type === 'sentiment');
+            const trending = speed.filter(row => row.metric_type === 'trending');
+            const top5 = speed.filter(row => row.metric_type === 'top5');
+            
+            updateChart('speedSentimentChart', sentiment, 'metric_name', 'count', 'Sentiment Distribution');
+            
+            const trendingRows = top5.length > 0 ? top5 : trending;
+            updateTrendingTable(trendingRows);
+        }
+
+        // ============ TRENDING TABLE ============
         function updateTrendingTable(data) {
             const tbody = document.getElementById('trendingTable');
             
@@ -506,7 +673,8 @@
                 </tr>
             `).join('');
         }
-        
+
+        // ============ HISTORY CHART ============
         function updateHistoryChart(history) {
             const ctx = document.getElementById('historyChart').getContext('2d');
             
@@ -555,7 +723,6 @@
                 return;
             }
             
-            // Group by timestamp and sentiment
             const grouped = {};
             sentimentData.forEach(row => {
                 const key = row.metric_name || 'Unknown';
@@ -564,7 +731,6 @@
                 grouped[key][ts] = (grouped[key][ts] || 0) + parseInt(row.count || 0);
             });
             
-            // Get all unique timestamps sorted
             const allTimestamps = [...new Set(sentimentData.map(row => row.window_start))].filter(t => t).sort();
             const labels = allTimestamps.map(ts => ts.substring(11, 19));
             
@@ -620,7 +786,204 @@
                 }
             });
         }
-        
+
+        // ============ BENCHMARK FUNCTIONS ============
+
+        function loadBenchmarkData() {
+            document.getElementById('benchmarkStatus').textContent = 'Loading...';
+            
+            fetchAPI('benchmark-results').then(data => {
+                if (data && data.length > 0) {
+                    benchmarkData = data;
+                    updateBenchmarkKPIs(data);
+                    updateBenchmarkTable(data);
+                    updateBenchmarkCharts(data);
+                    document.getElementById('benchmarkStatus').textContent = '✅ Available';
+                } else {
+                    document.getElementById('benchmarkStatus').textContent = '❌ Run ./run_benchmark.sh';
+                    document.getElementById('benchmarkTableBody').innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6b7280;">No benchmark data available. Run ./run_benchmark.sh</td></tr>';
+                }
+            });
+            
+            fetchAPI('benchmark-latency').then(data => {
+                if (data && data.length > 0) {
+                    updateLatencyTable(data);
+                }
+            });
+        }
+
+        function updateBenchmarkKPIs(data) {
+            const speedups = data.filter(r => r.mode === 'parallel').map(r => parseFloat(r.speedup) || 0);
+            const throughputs = data.filter(r => r.mode === 'parallel').map(r => parseFloat(r.throughput) || 0);
+            const bestSpeedup = Math.max(...speedups);
+            const bestThroughput = Math.max(...throughputs);
+            
+            document.getElementById('bestSpeedup').textContent = bestSpeedup > 0 ? `${bestSpeedup.toFixed(2)}x` : '-';
+            document.getElementById('bestThroughput').textContent = bestThroughput > 0 ? `${bestThroughput.toFixed(2)} rec/s` : '-';
+            document.getElementById('benchmarkTimestamp').textContent = new Date().toLocaleString();
+        }
+
+        function updateBenchmarkTable(data) {
+            const tbody = document.getElementById('benchmarkTableBody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#6b7280;">No benchmark data available</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = data.map(row => {
+                const speedup = parseFloat(row.speedup) || 0;
+                let speedupClass = 'speedup-low';
+                if (speedup > 2) speedupClass = 'speedup-high';
+                else if (speedup > 1.2) speedupClass = 'speedup-medium';
+                
+                return `<tr>
+                    <td><strong>${row.workload}</strong></td>
+                    <td><span class="badge ${row.mode === 'sequential' ? 'badge-neutral' : 'badge-positive'}">${row.mode}</span></td>
+                    <td>${row.workers}</td>
+                    <td>${row.time_seconds}</td>
+                    <td>${row.throughput}</td>
+                    <td class="${speedupClass}">${speedup > 0 ? speedup.toFixed(2) + 'x' : '-'}</td>
+                    <td>${row.efficiency || '-'}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        function updateLatencyTable(data) {
+            const tbody = document.getElementById('latencyTableBody');
+            if (!data || data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#6b7280;">No latency data available</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = data.map(row => `
+                <tr>
+                    <td><strong>${row.ingestion_rate}</strong></td>
+                    <td>${row.avg_latency}</td>
+                    <td>${row.p95_latency}</td>
+                    <td>${row.max_latency}</td>
+                </tr>
+            `).join('');
+        }
+
+        function updateBenchmarkCharts(data) {
+            const parallelData = data.filter(r => r.mode === 'parallel');
+            const sequentialData = data.filter(r => r.mode === 'sequential');
+            
+            // Speedup Chart
+            const ctx1 = document.getElementById('benchmarkSpeedupChart').getContext('2d');
+            if (charts['benchmarkSpeedupChart']) charts['benchmarkSpeedupChart'].destroy();
+            
+            const workloads = [...new Set(parallelData.map(r => r.workload))];
+            const workers = [2, 4];
+            const colors = ['#4a90d9', '#e74c3c', '#2ecc71'];
+            
+            const datasets = workloads.map((wl, idx) => {
+                const subset = parallelData.filter(r => r.workload == wl);
+                return {
+                    label: `${wl} records`,
+                    data: workers.map(w => {
+                        const found = subset.find(r => r.workers == w);
+                        return found ? parseFloat(found.speedup) || 0 : 0;
+                    }),
+                    borderColor: colors[idx % colors.length],
+                    backgroundColor: colors[idx % colors.length] + '20',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 5
+                };
+            });
+            
+            charts['benchmarkSpeedupChart'] = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: workers.map(w => `${w} cores`),
+                    datasets: datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Speedup'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Worker Count'
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Throughput Chart
+            const ctx2 = document.getElementById('benchmarkThroughputChart').getContext('2d');
+            if (charts['benchmarkThroughputChart']) charts['benchmarkThroughputChart'].destroy();
+            
+            const seqThroughput = sequentialData.map(r => ({
+                workload: r.workload,
+                throughput: parseFloat(r.throughput) || 0
+            }));
+            
+            const parThroughput = parallelData.filter(r => r.workers == 4).map(r => ({
+                workload: r.workload,
+                throughput: parseFloat(r.throughput) || 0
+            }));
+            
+            charts['benchmarkThroughputChart'] = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: workloads,
+                    datasets: [
+                        {
+                            label: 'Sequential (1 core)',
+                            data: seqThroughput.map(r => r.throughput),
+                            backgroundColor: '#e74c3c'
+                        },
+                        {
+                            label: 'Parallel (4 cores)',
+                            data: parThroughput.map(r => r.throughput),
+                            backgroundColor: '#2ecc71'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Throughput (rec/sec)'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Records Count'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ============ MAIN REFRESH ============
         async function refreshData() {
             const statusIndicator = document.getElementById('statusIndicator');
             const statusText = document.getElementById('statusText');
@@ -654,7 +1017,8 @@
                 document.getElementById('lastUpdated').textContent = `Error updating: ${new Date().toLocaleString()}`;
             }
         }
-        
+
+        // ============ AUTO REFRESH ============
         function setupAutoRefresh() {
             const select = document.getElementById('refreshRate');
             select.addEventListener('change', function() {
@@ -669,10 +1033,16 @@
                 }
             });
         }
-        
+
+        // ============ INITIALIZATION ============
         document.addEventListener('DOMContentLoaded', function() {
             refreshData();
             setupAutoRefresh();
+            
+            // Load benchmark data when tab is switched
+            document.querySelector('.tab-btn[data-tab="benchmark"]').addEventListener('click', function() {
+                loadBenchmarkData();
+            });
         });
     </script>
 </body>

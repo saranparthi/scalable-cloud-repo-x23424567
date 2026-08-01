@@ -1,0 +1,21 @@
+============================================================
+BENCHMARK SUMMARY
+============================================================
+
+ workload       mode  workers  time_seconds  throughput  speedup  efficiency  records_processed ingestion_rate avg_latency p95_latency max_latency
+     1000 sequential        1         49.77       20.09     1.00        1.00               1000           None        None        None        None
+     1000   parallel        2         10.80       92.58     4.61        2.30               1000           None        None        None        None
+     1000   parallel        4         12.97       77.09     3.84        0.96               1000           None        None        None        None
+     5000 sequential        1         29.68      168.48     1.00        1.00               5000           None        None        None        None
+     5000   parallel        2         25.60      195.32     1.16        0.58               5000           None        None        None        None
+     5000   parallel        4         27.93      179.04     1.06        0.27               5000           None        None        None        None
+    10000 sequential        1         39.38      253.97     1.00        1.00              10000           None        None        None        None
+    10000   parallel        2         37.60      265.94     1.05        0.52              10000           None        None        None        None
+    10000   parallel        4         32.72      305.65     1.20        0.30              10000           None        None        None        None
+
+LATENCY RESULTS:
+ ingestion_rate  avg_latency  p95_latency  max_latency
+             10         3.98         1.00       790.87
+             50         2.91         0.92       220.33
+            100         0.37         0.81         1.33
+            200         2.01         0.73       383.06

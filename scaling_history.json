@@ -1,0 +1,44 @@
+[
+  {
+    "timestamp": "2026-08-01T04:56:21.359300",
+    "action": "scale_up",
+    "old_capacity": 1,
+    "new_capacity": 2,
+    "reason": "CPU 76.8% > 20%"
+  },
+  {
+    "timestamp": "2026-08-01T04:57:08.524411",
+    "action": "scale_up",
+    "old_capacity": 2,
+    "new_capacity": 3,
+    "reason": "CPU 38.8% > 20%"
+  },
+  {
+    "timestamp": "2026-08-01T04:58:25.457367",
+    "action": "scale_down",
+    "old_capacity": 3,
+    "new_capacity": 2,
+    "reason": "CPU 0.0% < 10% for 60s"
+  },
+  {
+    "timestamp": "2026-08-01T04:58:56.575409",
+    "action": "scale_down",
+    "old_capacity": 2,
+    "new_capacity": 1,
+    "reason": "CPU 0.0% < 10% for 60s"
+  },
+  {
+    "timestamp": "2026-08-01T05:01:30.579339",
+    "action": "scale_up",
+    "old_capacity": 1,
+    "new_capacity": 2,
+    "reason": "CPU 73.9% > 20%"
+  },
+  {
+    "timestamp": "2026-08-01T05:03:02.822374",
+    "action": "scale_down",
+    "old_capacity": 2,
+    "new_capacity": 1,
+    "reason": "CPU 0.0% < 10% for 60s"
+  }
+]
