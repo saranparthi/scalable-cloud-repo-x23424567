@@ -64,17 +64,7 @@ def map_sentiment(text):
     except:
         return ("Neutral", 1)
 
-def map_keywords(text):
-    if not text:
-        return []
-    words = str(text).lower().split()
-    stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'for', 
-                 'with', 'without', 'of', 'to', 'is', 'i', 'you', 'we', 'they', 
-                 'he', 'she', 'it', 'my', 'your', 'our', 'their', 'from', 'this',
-                 'that', 'these', 'those', 'then', 'than', 'so', 'too', 'very',
-                 'just', 'like', 'get', 'got', 'can', 'will', 'would', 'could',
-                 'should', 'may', 'might', 'must', 'shall', 'has', 'have', 'had'}
-    return [(w, 1) for w in words if w not in stopwords and len(w) > 3]
+
 
 def map_topic(text):
     topics = {
@@ -101,6 +91,21 @@ def map_topic(text):
             if kw in text_lower:
                 return (topic, 1)
     return ("general", 1)
+
+
+
+def map_keywords(text):
+    if not text:
+        return []
+    words = str(text).lower().split()
+    stopwords = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'for', 
+                 'with', 'without', 'of', 'to', 'is', 'i', 'you', 'we', 'they', 
+                 'he', 'she', 'it', 'my', 'your', 'our', 'their', 'from', 'this',
+                 'that', 'these', 'those', 'then', 'than', 'so', 'too', 'very',
+                 'just', 'like', 'get', 'got', 'can', 'will', 'would', 'could',
+                 'should', 'may', 'might', 'must', 'shall', 'has', 'have', 'had'}
+    return [(w, 1) for w in words if w not in stopwords and len(w) > 3]
+
 
 def map_entities(text):
     entities = []
@@ -130,8 +135,7 @@ def map_entities(text):
     
     return entities
 
-def reduce_counts(rdd):
-    return rdd.reduceByKey(lambda a, b: a + b)
+
 
 def read_data_from_s3():
     print(f"Reading data from S3 (max {MAX_FILES_TO_READ} files)...")
@@ -184,6 +188,10 @@ def read_data_from_s3():
     except Exception as e:
         print(f"Error reading from S3: {e}")
         return []
+
+
+def reduce_counts(rdd):
+    return rdd.reduceByKey(lambda a, b: a + b)
 
 def save_to_s3(data, prefix, filename):
     s3_client = boto3.client('s3')
