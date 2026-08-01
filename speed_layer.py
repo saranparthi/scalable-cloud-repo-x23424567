@@ -1,5 +1,3 @@
-
-
 # speed_layer.py - PySpark Streaming with MapReduce Pattern
 
 from pyspark.sql import SparkSession
