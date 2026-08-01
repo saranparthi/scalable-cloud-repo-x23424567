@@ -17,24 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# === Configuration ===
-REGION = "us-east-1"
-INSTANCE_ID = "i-008404d3f8fbfac80"  # Your main EC2 instance
-AMI_ID = None
-INSTANCE_TYPE = 't3.small'
 
-# Security Group and Subnet
-SECURITY_GROUP_ID = 'sg-0d6fd56efa416294b'
-SUBNET_ID = 'subnet-069a9cc2e4c71df0b'
-
-# Scaling thresholds
-CPU_HIGH_THRESHOLD = 20
-CPU_LOW_THRESHOLD = 10
-INSTANCE_MIN = 1
-INSTANCE_MAX = 3
-SCALING_COOLDOWN = 30
-CHECK_INTERVAL = 15
-SCALE_DOWN_WAIT = 60
 
 # Tags for YOUR instances (CUSTOM auto-scaling)
 PROJECT_TAG = {'Key': 'project', 'Value': 'scalable-instance'}
@@ -46,6 +29,31 @@ cd /home/ec2-user/project
 source venv/bin/activate
 nohup ./run_all.sh > /var/log/pipeline.log 2>&1 &
 '''
+
+
+
+# Scaling thresholds
+CPU_HIGH_THRESHOLD = 20
+CPU_LOW_THRESHOLD = 10
+INSTANCE_MIN = 1
+INSTANCE_MAX = 3
+SCALING_COOLDOWN = 30
+CHECK_INTERVAL = 15
+SCALE_DOWN_WAIT = 60
+
+
+
+# === Configuration ===
+REGION = "us-east-1"
+INSTANCE_ID = "i-008404d3f8fbfac80"  # Your main EC2 instance
+AMI_ID = None
+INSTANCE_TYPE = 't3.small'
+
+# Security Group and Subnet
+SECURITY_GROUP_ID = 'sg-0d6fd56efa416294b'
+SUBNET_ID = 'subnet-069a9cc2e4c71df0b'
+
+
 
 # AWS clients
 ec2 = boto3.client('ec2', region_name=REGION)

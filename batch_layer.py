@@ -1,6 +1,3 @@
-
-
-
 # batch_layer.py
 
 #!/usr/bin/env python3
