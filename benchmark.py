@@ -1,5 +1,4 @@
-# benchmark.py
-#!/usr/bin/env python3
+
 """
 Performance Benchmark for Lambda Architecture
 Measures throughput, latency, and speedup under different loads
@@ -156,28 +155,6 @@ def run_sequential(records, total_valid):
     
     return total_time, total_valid/total_time
 
-# def run_parallel(records, total_valid, workers):
-    
-#     sc = spark.sparkContext
-    
-#     rdd = sc.parallelize(records, workers)
-    
-#     text_rdd = rdd.map(lambda x: x.get("text", "")) \
-#                   .filter(lambda x: x and len(x) > 0)
-    
-#     sentiment_counts = reduce_counts(
-#         text_rdd.flatMap(lambda text: [map_sentiment(text)])
-#     ).collect()
-    
-#     keyword_counts = reduce_counts(
-#         text_rdd.flatMap(map_keywords)
-#     ).sortBy(lambda x: x[1], ascending=False).take(20)
-    
-#     topic_counts = reduce_counts(
-#         text_rdd.map(map_topic)
-#     ).collect()
-
-
 
 
 def run_parallel(records, total_valid, workers):
@@ -314,24 +291,7 @@ def generate_graphs(results_df,latency_df, output_dir):
     plt.savefig(f'{output_dir}/throughput_comparison.png', dpi=150, bbox_inches='tight')
     plt.close()
     print("  Saved: throughput_comparison.png")
-    
-    # Graph 4: Latency vs Ingestion Rate
-    # if 'ingestion_rate' in results_df.columns and 'avg_latency' in results_df.columns:
-    #     plt.figure(figsize=(10, 6))
-    #     plt.plot(results_df['ingestion_rate'], results_df['avg_latency'], 'ro-', label='Avg Latency')
-    #     plt.plot(results_df['ingestion_rate'], results_df['p95_latency'], 'bo-', label='P95 Latency')
-    #     plt.plot(results_df['ingestion_rate'], results_df['max_latency'], 'go-', label='Max Latency')
-        
-    #     plt.xlabel('Ingestion Rate (records/sec)')
-    #     plt.ylabel('Latency (ms)')
-    #     plt.title('Latency vs Ingestion Rate')
-    #     plt.legend()
-    #     plt.grid(True)
-    #     plt.savefig(f'{output_dir}/latency_vs_ingestion.png', dpi=150, bbox_inches='tight')
-    #     plt.close()
-    #     print("  Saved: latency_vs_ingestion.png")
-    
-    
+
     # Graph 4: Latency vs Ingestion Rate
     if not latency_df.empty:
     
@@ -480,11 +440,6 @@ def main():
                     'workload': workload,
                     'mode': 'parallel',
                     'workers': workers,
-                    # 'time_seconds': round(par_time, 2),
-                    # 'throughput': round(par_throughput, 2),
-                    # 'speedup': round(speedup, 2),
-                    # 'efficiency': round(efficiency, 2),
-                    
                     'time_seconds': py_round(par_time),
                     'throughput': py_round(par_throughput),
                     'speedup': py_round(speedup),
@@ -511,14 +466,7 @@ def main():
         results_df = pd.DataFrame(results)
         latency_df = pd.DataFrame(latency_results)
         
-        # Merge for combined results
-        # if not results_df.empty and not latency_df.empty:
-        #     # Add latency data to results for graphing
-        #     results_df['ingestion_rate'] = None
-        #     results_df['avg_latency'] = None
-        #     results_df['p95_latency'] = None
-        #     results_df['max_latency'] = None
-        
+
         # Save results
         save_results_to_s3(results_df, 'benchmark_results.csv')
         if not latency_df.empty:
